@@ -138,6 +138,7 @@ button.sm{background:#e4f5de;color:#0a4d17;border:1px solid #b8d8b1;font-weight:
 #login{background:rgba(10,40,15,.45)}
 .mascots{filter:drop-shadow(0 4px 6px rgba(0,60,0,.18))}
 @media(max-width:820px){.wrap{padding:12px}.hero{padding-right:20px;min-height:0}}
+#subbtn{background:#16802a;color:#fff;font-size:16px;padding:12px 30px;border:0}#subbtn:disabled{opacity:.6}#app .hint.good{color:#0b7a27}#app .hint.bad{color:#c4201a}
 </style></head><body><div id="login"><div class="panel" style="width:100%;max-width:380px"><h1>📦 Store Order Portal</h1><p class="sub">Sign in to update the IASR file, budgets and download reports.</p>
 <label class="hint" for="lu">Username</label><input id="lu" type="text" autocomplete="username" autocapitalize="off" style="width:100%;margin:4px 0 10px;font:inherit;padding:9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)">
 <label class="hint" for="lp">Password</label><input id="lp" type="password" autocomplete="current-password" style="width:100%;margin:4px 0 12px;font:inherit;padding:9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)">
@@ -176,7 +177,8 @@ button.sm{background:#e4f5de;color:#0a4d17;border:1px solid #b8d8b1;font-weight:
  </div>
  <div class="scroll"><table><thead><tr><th>SKU</th><th>Product</th><th>Unit cost</th><th>In stock</th><th>On order</th><th>L2WS</th><th>Max qty</th><th>Order qty</th><th>Order value</th></tr></thead><tbody id="tb"></tbody>
  <tfoot><tr><td colspan="7">Store total</td><td class="num" id="fq">0</td><td class="num" id="fv">$0.00</td></tr></tfoot></table></div>
- <p class="hint">Max qty = allocation minus what is already on order. The box turns red if you enter more than this. Data is taken from your IASR Excel file.</p>
+ <div class="panel" id="subbar" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-top:14px"><div><b id="subinfo"></b><div class="hint" id="subm"></div></div><button class="sm" id="subbtn">Submit order</button></div>
+<p class="hint">Max qty = allocation minus what is already on order. The box turns red if you enter more than this. Data is taken from your IASR Excel file.</p>
 </div>
 <div id="v2" hidden><div class="scroll"><table><thead><tr><th>Loc</th><th>Store</th><th>Available budget</th><th>Order value</th><th>Remaining</th><th>Pool remaining</th><th>Status</th></tr></thead><tbody id="sb"></tbody></table></div>
 <p class="hint">Manager store budgets are counted as a pool (e.g. Lockwood + Mercury). Click a row to open that store's order.</p></div>
@@ -219,7 +221,7 @@ $("bar").className="bar"+(over||(!pooled&&i.rem<0)?" over":"");$("bar").firstEle
 const bad=pooled?over:i.rem<0;
 $("note").className="note"+(bad?" over":"");
 $("note").textContent=bad?`⚠️ Order exceeds the budget by ${fm(Math.abs(pooled?i.prem:i.rem))}${pooled?" (based on pool)":""}. Reduce the quantity.`:`🎉 Within budget. ${pooled?"Pool has":"Store has"} ${fm(pooled?i.prem:i.rem)} remaining.`;
-let fq=0;ROWS.forEach(r=>{if(r[0]==id)fq+=Q[id+"_"+SK[r[1]][0]]||0});$("fq").textContent=fq;$("fv").textContent=fm(i.o)}
+let fq=0;ROWS.forEach(r=>{if(r[0]==id)fq+=Q[id+"_"+SK[r[1]][0]]||0});$("fq").textContent=fq;$("fv").textContent=fm(i.o);$("subinfo").textContent=s.name+": "+fq+" units, "+fm(i.o)}
 function table(){const id=+$("store").value,q=$("q").value.toLowerCase(),only=$("only").checked;let h="";
 ROWS.forEach(r=>{if(r[0]!=id)return;const k=SK[r[1]],key=id+"_"+k[0],v=Q[key]||0;
 if(q&&!(k[0]+" "+k[1]).toLowerCase().includes(q))return;if(only&&!v)return;
@@ -234,7 +236,7 @@ h+=`<tr style="cursor:pointer" data-s="${s.id}"><td class="mono">${s.id}</td><td
 $("sb").addEventListener("click",e=>{const r=e.target.closest("tr");if(!r)return;$("store").value=r.dataset.s;tab(1);table()});
 function tab(n){$("v1").hidden=n!=1;$("v2").hidden=n!=2;$("t1").classList.toggle("on",n==1);$("t2").classList.toggle("on",n==2);if(n==2)summary()}
 $("t1").onclick=()=>tab(1);$("t2").onclick=()=>tab(2);
-$("store").onchange=table;$("q").oninput=table;$("only").onchange=table;
+$("store").onchange=()=>{$("subm").textContent="";table()};$("q").oninput=table;$("only").onchange=table;
 $("clr").onclick=()=>{const id=+$("store").value;Object.keys(Q).forEach(k=>{if(k.startsWith(id+"_"))delete Q[k]});save();push(id);table();kpis()};
 let dbh=null,timers={};
 function push(loc){if(!dbh)return;clearTimeout(timers[loc]);timers[loc]=setTimeout(()=>{const q={};ROWS.forEach(r=>{if(r[0]==loc){const v=Q[loc+"_"+SK[r[1]][0]];if(v)q[SK[r[1]][0]]=v}});dbh.doc("orders/"+loc).set({q,t:Date.now()}).then(()=>{$("sync").textContent="Saved. All managers' orders are combined here."}).catch(()=>{$("sync").textContent="Could not save to the shared sheet. Check your access."})},600)}
@@ -253,20 +255,36 @@ const loc=+a[1];if(!byId[loc]){bad++;return}
 Object.keys(Q).forEach(k=>{if(k.startsWith(loc+"_"))delete Q[k]});
 a[3].split(",").forEach(x=>{const [c0,v0]=x.split(":"),v=+v0;if(v>0&&ROWS.some(r=>r[0]==loc&&SK[r[1]][0]==c0))Q[loc+"_"+c0]=Math.floor(v)});push(loc);n++});
 save();kpis();table();if(!$("v2").hidden)summary();$("ims").textContent=n+" store order(s) imported"+(bad?", "+bad+" line(s) skipped":"")+"."};
-$("exp").onclick=async()=>{let dl=null;try{dl=window.claude&&await claude.use("downloads")}catch(e){}
-if(!dl){$("sync").textContent="Download is not available in this view. Open the artifact link in claude.ai.";return}
+function buildXlsx(ids){const S=ids?ST.filter(s=>ids.includes(s.id)):ST,R=ids?ROWS.filter(r=>ids.includes(r[0])):ROWS;
 const sm=[["Loc ID","Store","Type",BM+" Budget","Current Inventory","Available Budget","Order Value","Remaining (store)","Pooled Available","Pool Orders","Pool Remaining","Status"]],od=[["Loc ID","Store","SKU","Product","Quantity","Unit Cost","Order Value"]],all=[["Loc ID","Location","Status","Vendor Sku","Product Name","In Stock","On Order","Unit Cost","To Order","Order Value"]];
 let tb=0,ti=0,ta=0,to=0;
-ST.forEach(s=>{const i=info(s.id),p=i.m.length>1,bad=p?i.prem<0:i.rem<0;tb+=s.budget;ti+=s.inv;ta+=s.avail;to+=i.o;
+S.forEach(s=>{const i=info(s.id),p=i.m.length>1,bad=p?i.prem<0:i.rem<0;tb+=s.budget;ti+=s.inv;ta+=s.avail;to+=i.o;
 sm.push([s.id,s.name,s.mgr?"Manager":"Non-Manager",s.budget,s.inv,s.avail,i.o,+i.rem.toFixed(2),p?+i.pa.toFixed(2):"",p?+i.po.toFixed(2):"",p?+i.prem.toFixed(2):"",bad?"Over budget":"OK"])});
 sm.push(["","Grand Total","",+tb.toFixed(2),+ti.toFixed(2),+ta.toFixed(2),+to.toFixed(2),+(ta-to).toFixed(2),"","","",""]);
-ROWS.forEach(r=>{const s=byId[r[0]],k=SK[r[1]],q=Q[r[0]+"_"+k[0]]||0,v=+(q*k[2]).toFixed(2);
+R.forEach(r=>{const s=byId[r[0]],k=SK[r[1]],q=Q[r[0]+"_"+k[0]]||0,v=+(q*k[2]).toFixed(2);
 all.push([r[0],s.name,r[2],k[0],k[1],r[3],r[4],k[2],q||"",v]);
 if(q)od.push([r[0],s.name,k[0],k[1],q,k[2],v])});
 if(od.length>1){const tq=od.slice(1).reduce((a,x)=>a+x[4],0),tv=od.slice(1).reduce((a,x)=>a+x[6],0);od.push(["","","","Total",tq,"",+tv.toFixed(2)])}
 const wb=XLSX.utils.book_new();[["Order Report",od],["Store Summary",sm],["All Items",all]].forEach(([n,a])=>{const w=XLSX.utils.aoa_to_sheet(a);w["!cols"]=a[0].map((_,c)=>({wch:Math.min(46,Math.max(10,...a.slice(0,60).map(r=>String(r[c]??"").length)+2))}));XLSX.utils.book_append_sheet(wb,w,n)});
 const out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+return out}
+$("exp").onclick=async()=>{let dl=null;try{dl=window.claude&&await claude.use("downloads")}catch(e){}
+if(!dl){$("sync").textContent="Download is not available in this view. Open the artifact link in claude.ai.";return}
+const out=buildXlsx(null);
 try{await dl.save({filename:"Store_Orders_"+new Date().toISOString().slice(0,10)+".xlsx",data:new Blob([out])})}catch(e){if(e&&e.code!="declined")$("sync").textContent="Download failed ("+(e.code||"error")+")."}};
+function b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)}
+$("subbtn").onclick=async()=>{const id=+$("store").value,s=byId[id],i=info(id),m=$("subm");
+if(typeof API==="undefined"){m.className="hint bad";m.textContent="Email submit works on the Netlify site only.";return}
+let qty=0;ROWS.forEach(r=>{if(r[0]==id)qty+=Q[id+"_"+SK[r[1]][0]]||0});
+if(!qty){m.className="hint bad";m.textContent="Enter at least one quantity before you submit.";return}
+$("subbtn").disabled=true;m.className="hint";m.textContent="Submitting...";
+try{const out=buildXlsx([id]),lines=[];ROWS.forEach(r=>{if(r[0]==id){const k=SK[r[1]],q=Q[id+"_"+k[0]]||0;if(q)lines.push([k[0],k[1],q,k[2],+(q*k[2]).toFixed(2)])}});
+const pooled=i.m.length>1,over=pooled?i.prem<0:i.rem<0;
+const r=await fetch(API,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:"submit",loc:id,store:s.name,qty,value:i.o,over,pooled,avail:pooled?i.pa:s.avail,rem:pooled?i.prem:i.rem,bm:BM,lines,filename:"Store_Orders_"+id+"_"+s.name.replace(/\W+/g,"")+"_"+new Date().toISOString().slice(0,10)+".xlsx",file:b64(out)})});
+if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||("error "+r.status))}
+m.className="hint good";m.textContent="Submitted at "+new Date().toLocaleTimeString()+". The order was emailed."}
+catch(e){m.className="hint bad";m.textContent="Could not submit: "+e.message+". Please try again."}
+$("subbtn").disabled=false};
 function showMeta(){$("fi").textContent="IASR file in use: "+META.name+(META.t>BUILD?" (uploaded "+new Date(META.t).toLocaleString()+")":"")}
 function applyData(nd,m){SK=nd.skus;ROWS=nd.rows;META=m;recalc();kpis();if(!$("v2").hidden)summary();if(READY)table();showMeta()}
 async function parseIasr(f){const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});const a=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:null});
