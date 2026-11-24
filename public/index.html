@@ -139,6 +139,7 @@ button.sm{background:#e4f5de;color:#0a4d17;border:1px solid #b8d8b1;font-weight:
 .mascots{filter:drop-shadow(0 4px 6px rgba(0,60,0,.18))}
 @media(max-width:820px){.wrap{padding:12px}.hero{padding-right:20px;min-height:0}}
 #subbtn{background:#16802a;color:#fff;font-size:16px;padding:12px 30px;border:0}#subbtn:disabled{opacity:.6}#app .hint.good{color:#0b7a27}#app .hint.bad{color:#c4201a}
+.subc{margin-top:14px}.trk{margin:6px 0;padding:8px 10px;background:#f4faf1;border:1px solid var(--line);border-radius:10px}.trk a{color:#0a5a1c;font-weight:700}.pill.warn{background:#fff1c7;color:#6b4300}input[data-sub]{width:80px}
 </style></head><body><div id="login"><div class="panel" style="width:100%;max-width:380px"><h1>📦 Store Order Portal</h1><p class="sub">Sign in to update the IASR file, budgets and download reports.</p>
 <label class="hint" for="lu">Username</label><input id="lu" type="text" autocomplete="username" autocapitalize="off" style="width:100%;margin:4px 0 10px;font:inherit;padding:9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)">
 <label class="hint" for="lp">Password</label><input id="lp" type="password" autocomplete="current-password" style="width:100%;margin:4px 0 12px;font:inherit;padding:9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)">
@@ -164,7 +165,7 @@ button.sm{background:#e4f5de;color:#0a4d17;border:1px solid #b8d8b1;font-weight:
 <div class="row"><label class="hint" for="bm">Month label</label><input type="text" id="bm" style="font:inherit;padding:8px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink)"></div>
 <div class="scroll" style="margin-top:10px;box-shadow:none"><table style="min-width:0"><tbody id="bdt"></tbody></table></div>
 <div class="row" style="margin-top:10px"><button class="sm" id="bds">Save budgets</button><span class="hint" id="bdm"></span></div></details>
-<div class="tabs"><button id="t1" class="on">Enter order</button><button id="t2">All stores summary</button></div>
+<div class="tabs"><button id="t1" class="on">Enter order</button><button id="t2">All stores summary</button><button id="t3">Orders &amp; tracking</button></div>
 <div id="v1">
  <div class="panel">
   <div class="row"><select id="store" aria-label="Store"></select>
@@ -182,6 +183,8 @@ button.sm{background:#e4f5de;color:#0a4d17;border:1px solid #b8d8b1;font-weight:
 </div>
 <div id="v2" hidden><div class="scroll"><table><thead><tr><th>Loc</th><th>Store</th><th>Available budget</th><th>Order value</th><th>Remaining</th><th>Pool remaining</th><th>Status</th></tr></thead><tbody id="sb"></tbody></table></div>
 <p class="hint">Manager store budgets are counted as a pool (e.g. Lockwood + Mercury). Click a row to open that store's order.</p></div>
+<div id="v3" hidden><div class="panel"><div class="row"><select id="sf" aria-label="Store"></select><button class="sm" id="sr">Refresh UPS tracking</button><span class="hint" id="s3m"></span></div>
+<p class="hint" id="s3h"></p></div><div id="sl"></div></div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
@@ -234,8 +237,8 @@ head(+$("store").value);kpis()});
 function summary(){let h="";ST.forEach(s=>{const i=info(s.id),p=i.m.length>1,bad=p?i.prem<0:i.rem<0;
 h+=`<tr style="cursor:pointer" data-s="${s.id}"><td class="mono">${s.id}</td><td>${s.name}${s.mgr?'<span class="tag">Manager</span>':""}</td><td class="num">${fm(s.avail)}</td><td class="num">${fm(i.o)}</td><td class="num ${i.rem<0?"bad":""}">${fm(i.rem)}</td><td class="num ${i.prem<0?"bad":""}">${p?fm(i.prem):"-"}</td><td><span class="pill ${bad?"over":""}">${bad?"⚠️ Over budget":"✅ On track"}</span></td></tr>`});$("sb").innerHTML=h}
 $("sb").addEventListener("click",e=>{const r=e.target.closest("tr");if(!r)return;$("store").value=r.dataset.s;tab(1);table()});
-function tab(n){$("v1").hidden=n!=1;$("v2").hidden=n!=2;$("t1").classList.toggle("on",n==1);$("t2").classList.toggle("on",n==2);if(n==2)summary()}
-$("t1").onclick=()=>tab(1);$("t2").onclick=()=>tab(2);
+function tab(n){$("v1").hidden=n!=1;$("v2").hidden=n!=2;$("v3").hidden=n!=3;$("t1").classList.toggle("on",n==1);$("t2").classList.toggle("on",n==2);$("t3").classList.toggle("on",n==3);if(n==2)summary();if(n==3){if(!ME)$("sf").value=$("store").value;loadSubs(false)}}
+$("t1").onclick=()=>tab(1);$("t2").onclick=()=>tab(2);$("t3").onclick=()=>tab(3);$("sf").onchange=()=>loadSubs(false);$("sr").onclick=()=>loadSubs(true);
 $("store").onchange=()=>{$("subm").textContent="";table()};$("q").oninput=table;$("only").onchange=table;
 $("clr").onclick=()=>{const id=+$("store").value;Object.keys(Q).forEach(k=>{if(k.startsWith(id+"_"))delete Q[k]});save();push(id);table();kpis()};
 let dbh=null,timers={};
@@ -282,9 +285,42 @@ try{const out=buildXlsx([id]),lines=[];ROWS.forEach(r=>{if(r[0]==id){const k=SK[
 const pooled=i.m.length>1,over=pooled?i.prem<0:i.rem<0;
 const r=await fetch(API,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:"submit",loc:id,store:s.name,qty,value:i.o,over,pooled,avail:pooled?i.pa:s.avail,rem:pooled?i.prem:i.rem,bm:BM,lines,filename:"Store_Orders_"+id+"_"+s.name.replace(/\W+/g,"")+"_"+new Date().toISOString().slice(0,10)+".xlsx",file:b64(out)})});
 if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||("error "+r.status))}
-m.className="hint good";m.textContent="Submitted at "+new Date().toLocaleTimeString()+". The order was emailed."}
+const jj=await r.json().catch(()=>({}));m.className="hint good";m.textContent="Submitted at "+new Date().toLocaleTimeString()+(jj.id?" (Order ID "+jj.id+")":"")+". The order was emailed."}
 catch(e){m.className="hint bad";m.textContent="Could not submit: "+e.message+". Please try again."}
 $("subbtn").disabled=false};
+let SUBS=[],EDIT={};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ahdr=()=>({"content-type":"application/json","x-user":typeof UN!=="undefined"&&UN||"","x-pass":typeof PW!=="undefined"&&PW||""});
+async function apix(kind,x){const r=await fetch(API,{method:"POST",headers:ahdr(),body:JSON.stringify(Object.assign({kind},x))});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||("error "+r.status));return j}
+async function loadSubs(force){const box=$("sl");
+if(typeof API==="undefined"){box.innerHTML='<div class="panel">Orders and tracking work on the Netlify site only.</div>';return}
+$("s3h").textContent=ME?"Confirm what was placed, edit processed quantities and add UPS tracking numbers. Tracking status updates automatically every hour.":"Recent submitted orders for the selected store. Status and tracking are updated by the office.";
+$("s3m").textContent="Loading...";
+try{if(ME){const j=await apix("track_refresh",{loc:$("sf").value||null,force:!!force});SUBS=j.subs||[]}else{const r=await fetch(API+"?subs="+$("sf").value,{cache:"no-store"});SUBS=(await r.json()).subs||[]}
+$("s3m").textContent="";renderSubs()}catch(e){$("s3m").textContent="Could not load: "+e.message}}
+const STL={submitted:["Awaiting confirmation",""],full:["Fully placed",""],partial:["Partially placed","warn"],none:["Not placed","over"]};
+function renderSubs(){if(!SUBS.length){$("sl").innerHTML='<div class="panel">No submitted orders yet.</div>';return}
+$("sl").innerHTML=SUBS.map(s=>{const st=STL[s.status]||STL.submitted,ed=!!(EDIT[s.id]&&ME),done=s.status!="submitted";let pq=0,pv=0;
+const rows=s.lines.map((l,i)=>{const p=done?(l.p??0):null;if(p!=null){pq+=p;pv+=p*l.c}
+const cell=ed?`<input type="number" min="0" max="${l.q}" step="1" value="${l.p??l.q}" data-sub="${s.id}" data-i="${i}">`:(p==null?"-":p);
+return`<tr><td class="mono">${esc(l.s)}</td><td>${esc(l.n)}</td><td class="num">${l.q}</td><td class="num${p!=null&&p<l.q?" bad":""}">${cell}</td><td class="num">${fm(l.c)}</td><td class="num">${p==null?"-":fm(p*l.c)}</td></tr>`}).join("");
+const trk=(s.tracking||[]).map(t=>`<div class="trk"><b>${esc(t.number)}</b> <span class="pill ${t.delivered?"":"warn"}">${esc(t.status||"Added")}</span>${t.place?" "+esc(t.place):""}${t.when?" - "+esc(t.when):""}${t.eta&&!t.delivered?" - ETA "+esc(t.eta):""} <a href="https://www.ups.com/track?tracknum=${encodeURIComponent(t.number)}" target="_blank" rel="noopener">Track on UPS</a>${ME?` <button class="sm" data-act="deltrack" data-id="${s.id}" data-num="${esc(t.number)}">Remove</button>`:""}${t.error?`<div class="hint bad">${esc(t.error)}</div>`:""}</div>`).join("")||'<div class="hint">No tracking number yet.</div>';
+const adm=ME?`<div class="row" style="margin-top:10px">${ed?`<button class="sm" data-act="savepartial" data-id="${s.id}">Save partial order</button><button class="sm" data-act="cancel" data-id="${s.id}">Cancel</button>`:`<button class="sm" data-act="full" data-id="${s.id}">Fully placed</button><button class="sm" data-act="edit" data-id="${s.id}">Partially placed / edit quantities</button><button class="sm" data-act="none" data-id="${s.id}">Not placed</button>`}<input type="text" data-note="${s.id}" placeholder="Note (optional)" value="${esc(s.note||"")}" style="flex:1;min-width:160px"></div>
+<div class="row" style="margin-top:10px"><input type="text" data-trk="${s.id}" placeholder="UPS tracking number (1Z...)" style="min-width:240px"><button class="sm" data-act="addtrack" data-id="${s.id}">Add tracking</button></div>`:(s.note?`<div class="hint">Note: ${esc(s.note)}</div>`:"");
+return`<div class="panel subc"><div class="row" style="justify-content:space-between"><div><b>${esc(s.store)} (${s.loc})</b> <span class="hint">${new Date(s.t).toLocaleString()} - ID ${esc(s.id)}</span></div><span class="pill ${st[1]}">${st[0]}</span></div>
+<div class="hint" style="margin:6px 0">Ordered: ${s.qty} units, ${fm(s.value)}${done?` | Processed: ${pq} units, ${fm(pv)}`:""}</div>
+<div class="scroll"><table style="min-width:560px"><thead><tr><th>SKU</th><th>Product</th><th>Ordered</th><th>Processed</th><th>Unit cost</th><th>Processed value</th></tr></thead><tbody>${rows}</tbody></table></div>
+<div style="margin-top:10px"><b>UPS tracking</b>${trk}</div>${adm}</div>`}).join("")}
+$("sl").addEventListener("click",async e=>{const b=e.target.closest("[data-act]");if(!b||!ME)return;const id=b.dataset.id,act=b.dataset.act,note=(document.querySelector(`[data-note="${id}"]`)||{}).value||"";
+const set=j=>{const k=SUBS.findIndex(x=>x.id==id);if(k>=0&&j.sub)SUBS[k]=j.sub;$("s3m").textContent="";renderSubs()};
+try{$("s3m").textContent="Saving...";
+if(act=="edit"){EDIT[id]=1;$("s3m").textContent="";renderSubs();return}
+if(act=="cancel"){delete EDIT[id];$("s3m").textContent="";renderSubs();return}
+if(act=="full"||act=="none"){delete EDIT[id];set(await apix("sub_update",{id,status:act,note}))}
+if(act=="savepartial"){const pr=[...document.querySelectorAll(`[data-sub="${id}"]`)].map(i=>Math.max(0,Math.floor(+i.value||0)));delete EDIT[id];set(await apix("sub_update",{id,status:"partial",processed:pr,note}))}
+if(act=="addtrack"){const v=(document.querySelector(`[data-trk="${id}"]`)||{}).value||"";if(!v.trim()){$("s3m").textContent="Enter a tracking number first.";return}set(await apix("track_add",{id,number:v}))}
+if(act=="deltrack")set(await apix("track_del",{id,number:b.dataset.num}))}
+catch(x){$("s3m").textContent="Could not save: "+x.message}});
 function showMeta(){$("fi").textContent="IASR file in use: "+META.name+(META.t>BUILD?" (uploaded "+new Date(META.t).toLocaleString()+")":"")}
 function applyData(nd,m){SK=nd.skus;ROWS=nd.rows;META=m;recalc();kpis();if(!$("v2").hidden)summary();if(READY)table();showMeta()}
 async function parseIasr(f){const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});const a=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:null});
@@ -313,11 +349,12 @@ $("bds").onclick=async()=>{const v={};document.querySelectorAll("[data-b]").forE
 try{localStorage.setItem("budgets2",JSON.stringify(b))}catch(e){}
 let msg="Budgets saved.";if(dbh){try{await dbh.doc("config/budgets").set(b);msg+=" Shared with everyone."}catch(x){msg+=" Could not share (check access). Shown on this device only."}}else msg+=" Shown on this device only (not connected).";$("bdm").textContent=msg};
 async function H(u,p){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(SALT+":"+u+":"+p));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
-function setAdmin(a){["up","ca","exp","adm","bd"].forEach(id=>$(id).style.display=a?"":"none");
+function fillSF(a){$("sf").innerHTML=(a?'<option value="">All stores</option>':"")+ST.map(s=>`<option value="${s.id}">${s.id} - ${s.name}</option>`).join("");$("sf").value=a?"":$("store").value}
+function setAdmin(a){fillSF(a);$("sr").style.display=a?"":"none";["up","ca","exp","adm","bd"].forEach(id=>$(id).style.display=a?"":"none");
 $("lo").textContent=a?"Sign out":"Sign in";
 $("who").textContent=a?"Signed in as Admin":"Viewing as guest. Sign in to update the IASR file.";if(!a)$("fm").textContent=""}
 function boot(){$("store").innerHTML=ST.map(s=>`<option value="${s.id}">${s.id} - ${s.name}${s.mgr?" (Manager)":""}</option>`).join("");
-const hr=new Date().getHours();$("hi").textContent=(hr<12?"Good morning ☀️":hr<17?"Good afternoon 🌤️":"Good evening 🌙")+" — let's place today's orders!";$("wk").textContent=new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});loadBud();READY=true;tab(1);table();kpis();showMeta()}
+const hr=new Date().getHours();$("hi").textContent=(hr<12?"Good morning ☀️":hr<17?"Good afternoon 🌤️":"Good evening 🌙")+" — let's place today's orders!";$("wk").textContent=new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});loadBud();fillSF(false);READY=true;tab(1);table();kpis();showMeta()}
 function openLogin(o){$("login").classList.toggle("open",o);if(o){$("le").textContent="";setTimeout(()=>$("lu").focus(),50)}}
 async function login(){const un=$("lu").value.trim().toLowerCase(),pw=$("lp").value;$("le").textContent="";
 try{const r=await fetch(API,{method:"POST",headers:{"content-type":"application/json","x-user":un,"x-pass":pw},body:JSON.stringify({kind:"login"})});if(!r.ok){$("le").textContent=r.status==401?"Wrong username or password.":"Sign in is not available right now.";return}
